@@ -1,0 +1,7 @@
+language: rust
+env:
+  - RUST_BACKTRACE=1
+rust:
+  - 1.31.1
+script:
+  - cargo test
