@@ -87,6 +87,7 @@ pub fn container_stats(base_url: &str) -> Result<Vec<Stats>, Error> {
   let body: Value = reqwest::get(&format!("{}/v2/stats", base_url))?.json()?;
   debug!("Received stats {}", body);
   let stats = body.as_object().unwrap().iter()
+    .filter(|(_, stats)| !stats.is_null())
     .map(|(id, stats)|
       Stats {
         container_id: id.clone(),
@@ -134,7 +135,7 @@ pub fn report_to_cloudwatch(client: &impl CloudWatch, namespace: &str, data: Met
   Ok(())
 }
 
-const PROGRAM_DESC: &'static str = "";
+const PROGRAM_DESC: &'static str = "Small daemon to report selected Docker stats as Cloudwatch metrics.";
 
 pub fn parse_args(args: &Vec<String>) -> Result<Configuration, Error> {
   let mut argparser = Args::new("fargate-stats-reporter", PROGRAM_DESC);

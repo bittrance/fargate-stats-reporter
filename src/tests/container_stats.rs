@@ -48,3 +48,19 @@ fn extrace_container_stats() {
   let actual = crate::container_stats(&mockito::server_url()).unwrap();
   assert_eq!(expected, actual);
 }
+
+#[test]
+fn new_container_is_null() {
+  let reply = json!({"ze-id": null});
+
+  let _stats_api = mock("GET", "/v2/stats")
+    .with_status(200)
+    .with_header("content-type", "application/json")
+    .with_body(reply.to_string())
+    .create();
+
+  assert_eq!(
+    crate::container_stats(&mockito::server_url()).unwrap(),
+    Vec::<crate::Stats>::new()
+  );
+}
