@@ -6,11 +6,12 @@ extern crate reqwest;
 extern crate rusoto_cloudwatch;
 extern crate rusoto_core;
 extern crate serde_json;
+extern crate stderrlog;
 
 use args::Args;
 use failure::Error;
 use getopts::Occur;
-use log::debug;
+use log::{debug, info, warn};
 use rusoto_cloudwatch::{CloudWatch, CloudWatchClient, Dimension, MetricDatum, PutMetricDataInput};
 use rusoto_core::Region;
 use serde_json::Value;
@@ -22,9 +23,10 @@ use std::time::Duration;
 
 #[cfg(test)] pub mod tests;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Default, PartialEq)]
 pub struct Configuration {
   base_url: String,
+  log_level: usize,
   namespace: String,
 }
 
@@ -54,9 +56,9 @@ const DIMENSIONS_TO_COLLECT: [(&str, &str); 1] = [
 ];
 
 pub fn task_metadata(base_url: &str) -> Result<HashMap<String, Metadata>, Error> {
-  let containers: Vec<Value> = match reqwest::get(&format!("{}/v2/metadata", base_url))?
-    .json::<Value>()?
-    .get("Containers") {
+  let body: Value = reqwest::get(&format!("{}/v2/metadata", base_url))?.json()?;
+  debug!("Received metadata {}", body);
+  let containers: Vec<Value> = match body.get("Containers") {
       Some(c) => c.as_array().unwrap().clone(),
       None => Vec::new(),
     };
@@ -82,8 +84,8 @@ const METRICS_TO_COLLECT: [(&str, &str, &str); 1] = [
 ];
 
 pub fn container_stats(base_url: &str) -> Result<Vec<Stats>, Error> {
-  let body: Value = reqwest::get(&format!("{}/v2/stats", base_url))?
-      .json()?;
+  let body: Value = reqwest::get(&format!("{}/v2/stats", base_url))?.json()?;
+  debug!("Received stats {}", body);
   let stats = body.as_object().unwrap().iter()
     .map(|(id, stats)|
       Stats {
@@ -151,25 +153,45 @@ pub fn parse_args(args: &Vec<String>) -> Result<Configuration, Error> {
     Occur::Optional,
     Some("http://169.254.170.2".to_owned())
   );
+  argparser.option(
+    "l",
+    "log-level",
+    "Increase logging verbosity (0 = error, 4 = trace)",
+    "NUM",
+    Occur::Optional,
+    Some("1".to_owned())
+  );
 
   argparser.parse(args)?;
 
   Ok(Configuration {
     base_url: argparser.value_of("metadata-endpoint")?,
+    log_level: argparser.value_of("log-level")?,
     namespace: argparser.value_of("metric-namespace")?,
   })
 }
 
+fn setup_logging(configuration: &Configuration) -> Result<(), Error> {
+  stderrlog::new()
+    .module(module_path!())
+    .verbosity(configuration.log_level)
+    .init()?;
+  Ok(())
+}
+
 fn main() -> Result<(), Error> {
   let configuration = parse_args(&args().collect())?;
+  setup_logging(&configuration)?;
+  warn!("Starting with configuration {:?}", configuration);
   let client = CloudWatchClient::new(Region::default());
   loop {
     let metadata = task_metadata(&configuration.base_url)?;
     let stats = container_stats(&configuration.base_url)?;
     let metric_count = stats.iter().map(|s| s.metrics.len() as i32).sum::<i32>();
     let metrics = metrics_from_stats(stats, &metadata);
+    debug!("Sending metrics {:?}", metrics);
     report_to_cloudwatch(&client, &configuration.namespace, metrics)?;
-    debug!("Reported {} metrics on {} containers", metric_count, metadata.len());
+    info!("Reported {} metrics on {} containers", metric_count, metadata.len());
     sleep(Duration::from_millis(5000));
   }
 }

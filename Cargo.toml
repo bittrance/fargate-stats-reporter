@@ -8,11 +8,12 @@ edition = "2018"
 args = "2.2.0"
 failure = "*"
 getopts = "0.2.18"
-log = "0.4"
+log = "0.4.1"
 reqwest = "0.9.5"
 rusoto_cloudwatch = "0.36.0"
 rusoto_core = "0.36.0"
 serde_json = "1.0.33"
+stderrlog = "0.4.1"
 
 [dev-dependencies]
 mockito = "*"
