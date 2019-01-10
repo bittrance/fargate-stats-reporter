@@ -18,6 +18,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::env::args;
 use std::iter::FromIterator;
+use std::process::exit;
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -107,7 +108,7 @@ type Metrics = Vec<MetricDatum>;
 
 pub fn metrics_from_stats(stats: Vec<Stats>, metadata: &HashMap<String, Metadata>) -> Metrics {
   stats.into_iter()
-    .filter(|c| metadata.contains_key(&c.container_id))
+    .filter(|s| metadata.contains_key(&s.container_id))
     .flat_map(|s| {
       let dimensions = &metadata.get(&s.container_id).unwrap().dimensions;
       let timestamp = s.timestamp;
@@ -137,14 +138,19 @@ pub fn report_to_cloudwatch(client: &impl CloudWatch, namespace: &str, data: Met
 
 const PROGRAM_DESC: &'static str = "Small daemon to report selected Docker stats as Cloudwatch metrics.";
 
-pub fn parse_args(args: &Vec<String>) -> Result<Configuration, Error> {
+pub enum RunMode {
+  Normal(Configuration),
+  Help(String),
+}
+
+pub fn parse_args(args: &Vec<String>) -> Result<RunMode, Error> {
   let mut argparser = Args::new("fargate-stats-reporter", PROGRAM_DESC);
   argparser.option(
     "n",
     "metric-namespace",
     "Namespace under which to report metrics",
     "NAMESPACE",
-    Occur::Req,
+    Occur::Optional,
     None);
   argparser.option(
     "e",
@@ -162,14 +168,19 @@ pub fn parse_args(args: &Vec<String>) -> Result<Configuration, Error> {
     Occur::Optional,
     Some("1".to_owned())
   );
+  argparser.flag("h", "help", "Print this help and exit");
 
   argparser.parse(args)?;
 
-  Ok(Configuration {
-    base_url: argparser.value_of("metadata-endpoint")?,
-    log_level: argparser.value_of("log-level")?,
-    namespace: argparser.value_of("metric-namespace")?,
-  })
+  if argparser.value_of("help")? {
+    Ok(RunMode::Help(argparser.full_usage()))
+  } else {
+    Ok(RunMode::Normal(Configuration {
+      base_url: argparser.value_of("metadata-endpoint")?,
+      log_level: argparser.value_of("log-level")?,
+      namespace: argparser.value_of("metric-namespace")?,
+    }))
+  }
 }
 
 fn setup_logging(configuration: &Configuration) -> Result<(), Error> {
@@ -181,7 +192,13 @@ fn setup_logging(configuration: &Configuration) -> Result<(), Error> {
 }
 
 fn main() -> Result<(), Error> {
-  let configuration = parse_args(&args().collect())?;
+  let configuration = match parse_args(&args().collect())? {
+    RunMode::Help(usage) => {
+      println!("{}", usage);
+      exit(0);
+    },
+    RunMode::Normal(configuration) => configuration,
+  };
   setup_logging(&configuration)?;
   warn!("Starting with configuration {:?}", configuration);
   let client = CloudWatchClient::new(Region::default());
