@@ -27,6 +27,7 @@ use std::time::Duration;
 #[derive(Debug, Default, PartialEq)]
 pub struct Configuration {
   base_url: String,
+  interval: Duration,
   log_level: usize,
   namespace: String,
 }
@@ -161,6 +162,14 @@ pub fn parse_args(args: &Vec<String>) -> Result<RunMode, Error> {
     Some("http://169.254.170.2".to_owned())
   );
   argparser.option(
+    "i",
+    "interval",
+    "Interval between reports to CloudWatch",
+    "SECONDS",
+    Occur::Optional,
+    Some("60".to_owned())
+  );
+  argparser.option(
     "l",
     "log-level",
     "Increase logging verbosity (0 = error, 4 = trace)",
@@ -177,6 +186,7 @@ pub fn parse_args(args: &Vec<String>) -> Result<RunMode, Error> {
   } else {
     Ok(RunMode::Normal(Configuration {
       base_url: argparser.value_of("metadata-endpoint")?,
+      interval: Duration::from_secs(argparser.value_of("interval")?),
       log_level: argparser.value_of("log-level")?,
       namespace: argparser.value_of("metric-namespace")?,
     }))
@@ -210,6 +220,6 @@ fn main() -> Result<(), Error> {
     debug!("Sending metrics {:?}", metrics);
     report_to_cloudwatch(&client, &configuration.namespace, metrics)?;
     info!("Reported {} metrics on {} containers", metric_count, metadata.len());
-    sleep(Duration::from_millis(5000));
+    sleep(configuration.interval);
   }
 }
