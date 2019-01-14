@@ -1,4 +1,5 @@
 extern crate args;
+extern crate chrono;
 extern crate failure;
 extern crate getopts;
 extern crate log;
@@ -9,6 +10,7 @@ extern crate serde_json;
 extern crate stderrlog;
 
 use args::Args;
+use chrono::{DateTime, FixedOffset};
 use failure::Error;
 use getopts::Occur;
 use log::{debug, info, warn};
@@ -50,7 +52,7 @@ pub struct Metric {
 pub struct Stats {
   container_id: String,
   metrics: Vec<Metric>,
-  timestamp: String,
+  timestamp: DateTime<FixedOffset>,
 }
 
 const DIMENSIONS_TO_COLLECT: [(&str, &str); 1] = [
@@ -98,7 +100,7 @@ pub fn container_stats(base_url: &str) -> Result<Vec<Stats>, Error> {
           unit: String::from(*u),
           value: stats.pointer(p).unwrap().as_f64().unwrap(),
         }).collect(),
-        timestamp: stats["read"].as_str().unwrap().to_owned(),
+        timestamp: DateTime::parse_from_rfc3339(stats["read"].as_str().unwrap()).unwrap(),
       }
     )
     .collect();
@@ -117,7 +119,7 @@ pub fn metrics_from_stats(stats: Vec<Stats>, metadata: &HashMap<String, Metadata
         MetricDatum {
           dimensions: Some(dimensions.clone()),
           metric_name: m.name,
-          timestamp: Some(timestamp.clone()),
+          timestamp: Some(format!("{}", timestamp.format("%FT%T%.3f%:z"))),
           unit: Some(m.unit),
           value: Some(m.value),
           ..Default::default()

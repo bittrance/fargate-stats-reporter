@@ -6,6 +6,7 @@ edition = "2018"
 
 [dependencies]
 args = "2.2.0"
+chrono = "0.4.6"
 failure = "*"
 getopts = "0.2.18"
 log = "0.4.1"

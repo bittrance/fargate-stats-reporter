@@ -1,3 +1,4 @@
+use chrono::DateTime;
 use mockito::mock;
 use serde_json::json;
 
@@ -42,7 +43,7 @@ fn extrace_container_stats() {
         unit: "Bytes".to_owned(),
         value: 0.25
       }],
-      timestamp: "2019-01-07T23:15:48.677482816Z".to_owned(),
+      timestamp: DateTime::parse_from_rfc3339("2019-01-07T23:15:48.677482816Z").unwrap(),
     }
   ];
   let actual = crate::container_stats(&mockito::server_url()).unwrap();

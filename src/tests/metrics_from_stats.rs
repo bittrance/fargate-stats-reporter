@@ -1,3 +1,4 @@
+use chrono::DateTime;
 use rusoto_cloudwatch::{Dimension, MetricDatum};
 use std::collections::HashMap;
 
@@ -11,7 +12,7 @@ fn stats_to_cw_metrics() {
         unit: "Bytes".to_owned(),
         value: 0.25
       }],
-      timestamp: "2019-01-07T23:15:48.677482816Z".to_owned(),
+      timestamp: DateTime::parse_from_rfc3339("2019-01-07T23:15:48.677482816Z").unwrap(),
     }
   ];
   let mut metadata = HashMap::<String, crate::Metadata>::new();
@@ -37,7 +38,7 @@ fn stats_to_cw_metrics() {
         }
       ]),
       metric_name: "max_usage".to_owned(),
-      timestamp: Some("2019-01-07T23:15:48.677482816Z".to_owned()),
+      timestamp: Some("2019-01-07T23:15:48.677+00:00".to_owned()),
       unit: Some("Bytes".to_owned()),
       value: Some(0.25),
       ..Default::default()
@@ -56,7 +57,7 @@ fn container_is_unknown() {
         unit: "Bytes".to_owned(),
         value: 0.25
       }],
-      timestamp: "2019-01-07T23:15:48.677482816Z".to_owned(),
+      timestamp: DateTime::parse_from_rfc3339("2019-01-07T23:15:48.677482816Z").unwrap(),
     }
   ];
   let metadata = HashMap::<String, crate::Metadata>::new();
