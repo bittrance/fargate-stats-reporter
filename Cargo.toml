@@ -18,6 +18,7 @@ stderrlog = "0.4.1"
 
 [dev-dependencies]
 mockito = "*"
+rusoto_mock = "*"
 
  [profile.release]
 lto = true

@@ -11,10 +11,10 @@ extern crate stderrlog;
 
 use args::Args;
 use chrono::{DateTime, FixedOffset};
-use failure::Error;
+use failure::{Error, format_err};
 use getopts::Occur;
 use log::{debug, info, warn};
-use rusoto_cloudwatch::{CloudWatch, CloudWatchClient, Dimension, MetricDatum, PutMetricDataInput};
+use rusoto_cloudwatch::{CloudWatch, CloudWatchClient, Dimension, MetricDatum, PutMetricDataError, PutMetricDataInput};
 use rusoto_core::Region;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -131,10 +131,15 @@ pub fn metrics_from_stats(stats: Vec<Stats>, metadata: &HashMap<String, Metadata
 
 pub fn report_to_cloudwatch(client: &impl CloudWatch, namespace: &str, data: Metrics) -> Result<(), Error> {
   for datum in data {
-    client.put_metric_data(PutMetricDataInput {
+    match client.put_metric_data(PutMetricDataInput {
       namespace: String::from(namespace),
       metric_data: vec![datum]
-    }).sync()?;
+    }).sync() {
+      Ok(_) => Ok(()),
+      Err(PutMetricDataError::Unknown(response)) =>
+        Err(format_err!("{}", String::from_utf8(response.body)?)),
+      Err(err) => Err(Error::from_boxed_compat(Box::new(err))),
+    }?;
   }
   Ok(())
 }
