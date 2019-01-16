@@ -18,6 +18,7 @@ use reqwest::Client as HttpClient;
 use rusoto_cloudwatch::{CloudWatch, CloudWatchClient, Dimension, MetricDatum, PutMetricDataError, PutMetricDataInput};
 use rusoto_core::Region;
 use serde_json::Value;
+use std::cmp::min;
 use std::collections::HashMap;
 use std::env::args;
 use std::iter::FromIterator;
@@ -131,11 +132,12 @@ pub fn metrics_from_stats(stats: Vec<Stats>, metadata: &HashMap<String, Metadata
     .collect()
 }
 
-pub fn report_to_cloudwatch(client: &impl CloudWatch, namespace: &str, data: Metrics) -> Result<(), Error> {
-  for datum in data {
+pub fn report_to_cloudwatch(client: &impl CloudWatch, namespace: &str, data: &mut Metrics) -> Result<(), Error> {
+  while data.len() > 0 {
+    let chunk = data.drain(..min(20, data.len())).collect();
     match client.put_metric_data(PutMetricDataInput {
       namespace: String::from(namespace),
-      metric_data: vec![datum]
+      metric_data: chunk,
     }).sync() {
       Ok(_) => Ok(()),
       Err(PutMetricDataError::Unknown(response)) =>
@@ -228,9 +230,9 @@ fn main() -> Result<(), Error> {
     let metadata = task_metadata(&http, &configuration.base_url)?;
     let stats = container_stats(&http, &configuration.base_url)?;
     let metric_count = stats.iter().map(|s| s.metrics.len() as i32).sum::<i32>();
-    let metrics = metrics_from_stats(stats, &metadata);
+    let mut metrics = metrics_from_stats(stats, &metadata);
     debug!("Sending metrics {:?}", metrics);
-    report_to_cloudwatch(&client, &configuration.namespace, metrics)?;
+    report_to_cloudwatch(&client, &configuration.namespace, &mut metrics)?;
     info!("Reported {} metrics on {} containers", metric_count, metadata.len());
     sleep(configuration.interval);
   }

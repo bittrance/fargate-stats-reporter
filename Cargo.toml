@@ -19,7 +19,8 @@ stderrlog = "0.4.1"
 [dev-dependencies]
 mockito = "*"
 rusoto_mock = "*"
+serde_urlencoded = "*"
 
- [profile.release]
+[profile.release]
 lto = true
 panic = "abort"
