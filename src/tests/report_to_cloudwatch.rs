@@ -1,4 +1,5 @@
 use rusoto_cloudwatch::{CloudWatchClient, Dimension, MetricDatum};
+use rusoto_core::HttpDispatchError;
 use rusoto_core::param::Params;
 use rusoto_core::signature::{SignedRequest, SignedRequestPayload};
 use rusoto_mock::{MockCredentialsProvider, MockRequestDispatcher};
@@ -59,17 +60,27 @@ fn sends_batches_of_20_metrics() {
     assert_eq!(params.get("MetricData.member.20.Value"), Some(&Some("25".to_owned())));
     *count.lock().unwrap() += 1;
   });
-  let mut data = repeat(metric_datum()).take(40).collect();
-  crate::report_to_cloudwatch(&cw, "testing", &mut data).unwrap();
+  let data = repeat(metric_datum()).take(40).collect();
+  crate::report_to_cloudwatch(&cw, "testing", &data).unwrap();
   assert_eq!(2, *copy.lock().unwrap());
 }
 
 #[test]
-fn clears_queue_on_success() {
+fn says_count_items_were_sent() {
   let cw = client_with_http_status(200);
-  let mut data = vec![metric_datum(), metric_datum()];
-  crate::report_to_cloudwatch(&cw, "testing", &mut data).unwrap();
-  assert_eq!(0, data.len());
+  let data = vec![metric_datum(), metric_datum()];
+  assert_eq!(2, crate::report_to_cloudwatch(&cw, "testing", &data).unwrap());
+}
+
+#[test]
+fn says_zero_items_were_processed_on_dispatch_error() {
+  let cw = CloudWatchClient::new_with(
+    MockRequestDispatcher::with_dispatch_error(HttpDispatchError::new("boom!".to_owned())),
+    MockCredentialsProvider,
+    Default::default()
+  );
+  let data = vec![metric_datum()];
+  assert_eq!(0, crate::report_to_cloudwatch(&cw, "testing", &data).unwrap());
 }
 
 #[test]
@@ -79,10 +90,10 @@ fn cloudwatch_server_side_error_is_readable() {
       r#"<ErrorResponse xmlns="http://monitoring.amazonaws.com/doc/2010-08-01/">
       <Error>
         <Type>Sender</Type>
-        <Code>AccessDenied</Code>
-        <Message>User: foobar is not authorized to perform: cloudwatch:PutMetricData</Message>
+        <Code>MissingParameter</Code>
+        <Message>some message</Message>
       </Error>
-      <RequestId>0bac1fb9-182f-11e9-93a4-8ba10ca20155</RequestId>
+      <RequestId>uuid</RequestId>
       </ErrorResponse>"#
     ),
     MockCredentialsProvider,
@@ -91,6 +102,6 @@ fn cloudwatch_server_side_error_is_readable() {
   let mut data = vec![metric_datum()];
   match crate::report_to_cloudwatch(&cw, "testing", &mut data) {
     Ok(_) => panic!("Expected failed request to return err"),
-    Err(msg) => assert!(format!("{}", msg).contains("foobar is not authorized")),
+    Err(msg) => assert!(format!("{}", msg).contains("some message")),
   };
 }

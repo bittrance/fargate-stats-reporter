@@ -18,7 +18,6 @@ use reqwest::Client as HttpClient;
 use rusoto_cloudwatch::{CloudWatch, CloudWatchClient, Dimension, MetricDatum, PutMetricDataError, PutMetricDataInput};
 use rusoto_core::Region;
 use serde_json::Value;
-use std::cmp::min;
 use std::collections::HashMap;
 use std::env::args;
 use std::iter::FromIterator;
@@ -132,20 +131,43 @@ pub fn metrics_from_stats(stats: Vec<Stats>, metadata: &HashMap<String, Metadata
     .collect()
 }
 
-pub fn report_to_cloudwatch(client: &impl CloudWatch, namespace: &str, data: &mut Metrics) -> Result<(), Error> {
-  while data.len() > 0 {
-    let chunk = data.drain(..min(20, data.len())).collect();
+pub fn report_to_cloudwatch(client: &impl CloudWatch, namespace: &str, data: &Metrics) -> Result<usize, Error> {
+  let mut start_index = 0;
+  while data.len() > start_index {
+    let chunk: Metrics = data.iter().skip(start_index).take(20).map(|l| l.clone()).collect();
+    let chunk_size = chunk.len();
     match client.put_metric_data(PutMetricDataInput {
       namespace: String::from(namespace),
       metric_data: chunk,
     }).sync() {
-      Ok(_) => Ok(()),
-      Err(PutMetricDataError::Unknown(response)) =>
-        Err(format_err!("{}", String::from_utf8(response.body)?)),
-      Err(err) => Err(Error::from_boxed_compat(Box::new(err))),
+      Ok(_) => {
+        start_index += chunk_size;
+        Ok(())
+      },
+      Err(err) => match classify_cloudwatch_error(err) {
+        Action::Retry(cause) => {
+          warn!("Retrying error {}", cause);
+          break
+        },
+        Action::Fail(err) => Err(err),
+      }
     }?;
   }
-  Ok(())
+  Ok(start_index)
+}
+
+pub enum Action {
+  Retry(String),
+  Fail(Error),
+}
+
+pub fn classify_cloudwatch_error(error: PutMetricDataError) -> Action {
+  match error {
+    PutMetricDataError::HttpDispatch(err) => Action::Retry(format!("{:?}", err)),
+    PutMetricDataError::InternalServiceFault(message) => Action::Retry(message),
+    PutMetricDataError::Unknown(response) => Action::Retry(String::from_utf8(response.body).unwrap()),
+    err => Action::Fail(format_err!("{}", err)),
+  }
 }
 
 const PROGRAM_DESC: &'static str = "Small daemon to report selected Docker stats as Cloudwatch metrics.";
@@ -230,9 +252,9 @@ fn main() -> Result<(), Error> {
     let metadata = task_metadata(&http, &configuration.base_url)?;
     let stats = container_stats(&http, &configuration.base_url)?;
     let metric_count = stats.iter().map(|s| s.metrics.len() as i32).sum::<i32>();
-    let mut metrics = metrics_from_stats(stats, &metadata);
+    let metrics = metrics_from_stats(stats, &metadata);
     debug!("Sending metrics {:?}", metrics);
-    report_to_cloudwatch(&client, &configuration.namespace, &mut metrics)?;
+    report_to_cloudwatch(&client, &configuration.namespace, &metrics)?;
     info!("Reported {} metrics on {} containers", metric_count, metadata.len());
     sleep(configuration.interval);
   }
