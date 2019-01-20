@@ -14,6 +14,7 @@ use chrono::{DateTime, FixedOffset};
 use failure::{Error, format_err};
 use getopts::Occur;
 use log::{debug, info, warn};
+use reqwest::Client as HttpClient;
 use rusoto_cloudwatch::{CloudWatch, CloudWatchClient, Dimension, MetricDatum, PutMetricDataError, PutMetricDataInput};
 use rusoto_core::Region;
 use serde_json::Value;
@@ -59,8 +60,8 @@ const DIMENSIONS_TO_COLLECT: [(&str, &str); 1] = [
   ("/Name", "task"),
 ];
 
-pub fn task_metadata(base_url: &str) -> Result<HashMap<String, Metadata>, Error> {
-  let body: Value = reqwest::get(&format!("{}/v2/metadata", base_url))?.json()?;
+pub fn task_metadata(http: &HttpClient, base_url: &str) -> Result<HashMap<String, Metadata>, Error> {
+  let body: Value = http.get(&format!("{}/v2/metadata", base_url)).send()?.json()?;
   debug!("Received metadata {}", body);
   let containers: Vec<Value> = match body.get("Containers") {
       Some(c) => c.as_array().unwrap().clone(),
@@ -88,8 +89,8 @@ const METRICS_TO_COLLECT: [(&str, &str, &str); 2] = [
   ("/memory_stats/usage", "usage", "Bytes"),
 ];
 
-pub fn container_stats(base_url: &str) -> Result<Vec<Stats>, Error> {
-  let body: Value = reqwest::get(&format!("{}/v2/stats", base_url))?.json()?;
+pub fn container_stats(http: &HttpClient, base_url: &str) -> Result<Vec<Stats>, Error> {
+  let body: Value = http.get(&format!("{}/v2/stats", base_url)).send()?.json()?;
   debug!("Received stats {}", body);
   let stats = body.as_object().unwrap().iter()
     .filter(|(_, stats)| !stats.is_null())
@@ -220,9 +221,12 @@ fn main() -> Result<(), Error> {
   setup_logging(&configuration)?;
   warn!("Starting with configuration {:?}", configuration);
   let client = CloudWatchClient::new(Region::default());
+  let http = HttpClient::builder()
+    .timeout(Duration::from_secs(2))
+    .build()?;
   loop {
-    let metadata = task_metadata(&configuration.base_url)?;
-    let stats = container_stats(&configuration.base_url)?;
+    let metadata = task_metadata(&http, &configuration.base_url)?;
+    let stats = container_stats(&http, &configuration.base_url)?;
     let metric_count = stats.iter().map(|s| s.metrics.len() as i32).sum::<i32>();
     let metrics = metrics_from_stats(stats, &metadata);
     debug!("Sending metrics {:?}", metrics);
