@@ -2,19 +2,22 @@ use chrono::DateTime;
 use rusoto_cloudwatch::{Dimension, MetricDatum};
 use std::collections::HashMap;
 
+fn stats() -> crate::Stats {
+  crate::Stats {
+    container_id: "ze-id".to_owned(),
+    metrics: vec![crate::Metric {
+      name: "max_usage".to_owned(),
+      unit: "Bytes".to_owned(),
+      value: 0.25
+    }],
+    timestamp: DateTime::parse_from_rfc3339("2019-01-07T23:15:48.677482816Z").unwrap(),
+  }
+}
+
 #[test]
 fn stats_to_cw_metrics() {
-  let stats = vec![
-    crate::Stats {
-      container_id: "ze-id".to_owned(),
-      metrics: vec![crate::Metric {
-        name: "max_usage".to_owned(),
-        unit: "Bytes".to_owned(),
-        value: 0.25
-      }],
-      timestamp: DateTime::parse_from_rfc3339("2019-01-07T23:15:48.677482816Z").unwrap(),
-    }
-  ];
+  let mut metrics = Vec::<MetricDatum>::new();
+  let stats = vec![stats()];
   let mut metadata = HashMap::<String, crate::Metadata>::new();
   metadata.insert(
     "ze-id".to_owned(),
@@ -44,22 +47,15 @@ fn stats_to_cw_metrics() {
       ..Default::default()
     }
   ];
-  assert_eq!(expected, crate::metrics_from_stats(stats, &metadata));
+  crate::metrics_from_stats(&mut metrics, stats, &metadata);
+  assert_eq!(expected, metrics);
 }
 
 #[test]
 fn container_is_unknown() {
-  let stats = vec![
-    crate::Stats {
-      container_id: "ze-id".to_owned(),
-      metrics: vec![crate::Metric {
-        name: "max_usage".to_owned(),
-        unit: "Bytes".to_owned(),
-        value: 0.25
-      }],
-      timestamp: DateTime::parse_from_rfc3339("2019-01-07T23:15:48.677482816Z").unwrap(),
-    }
-  ];
+  let mut metrics = Vec::<MetricDatum>::new();
+  let stats = vec![stats()];
   let metadata = HashMap::<String, crate::Metadata>::new();
-  assert_eq!(Vec::<MetricDatum>::new(), crate::metrics_from_stats(stats, &metadata));
+  crate::metrics_from_stats(&mut metrics, stats, &metadata);
+  assert_eq!(Vec::<MetricDatum>::new(), metrics);
 }

@@ -1,4 +1,4 @@
-use rusoto_cloudwatch::{CloudWatchClient, Dimension, MetricDatum};
+use rusoto_cloudwatch::CloudWatchClient;
 use rusoto_core::HttpDispatchError;
 use rusoto_core::param::Params;
 use rusoto_core::signature::{SignedRequest, SignedRequestPayload};
@@ -6,6 +6,7 @@ use rusoto_mock::{MockCredentialsProvider, MockRequestDispatcher};
 use serde_urlencoded;
 use std::iter::repeat;
 use std::sync::{Arc, Mutex};
+use super::metric_datum;
 
 fn client_with_http_status(status: u16) -> CloudWatchClient {
   CloudWatchClient::new_with(
@@ -28,17 +29,6 @@ fn client_with_checker<F>(checker: F) -> CloudWatchClient where F: Fn(Params) + 
     MockCredentialsProvider,
     Default::default()
   )
-}
-
-fn metric_datum() -> MetricDatum {
-  MetricDatum {
-    dimensions: Some(vec![Dimension { name: "container".to_owned(), value: "ze-id".to_owned() }]),
-    metric_name: "max_usage".to_owned(),
-    timestamp: Some("ze-time".to_owned()),
-    unit: Some("Bytes".to_owned()),
-    value: Some(25.0),
-    ..Default::default()
-  }
 }
 
 #[test]
