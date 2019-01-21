@@ -83,8 +83,9 @@ pub fn task_metadata(base_url: &str) -> Result<HashMap<String, Metadata>, Error>
   Ok(HashMap::from_iter(metadata_pairs))
 }
 
-const METRICS_TO_COLLECT: [(&str, &str, &str); 1] = [
+const METRICS_TO_COLLECT: [(&str, &str, &str); 2] = [
   ("/memory_stats/max_usage", "max_usage", "Bytes"),
+  ("/memory_stats/usage", "usage", "Bytes"),
 ];
 
 pub fn container_stats(base_url: &str) -> Result<Vec<Stats>, Error> {

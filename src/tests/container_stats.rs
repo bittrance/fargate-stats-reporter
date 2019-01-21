@@ -24,7 +24,8 @@ fn extrace_container_stats() {
     "ze-id": {
       "read": "2019-01-07T23:15:48.677482816Z",
       "memory_stats": {
-        "max_usage": 0.25
+        "max_usage": 0.25,
+        "usage": 0.12,
       }
     }
   });
@@ -42,6 +43,10 @@ fn extrace_container_stats() {
         name: "max_usage".to_owned(),
         unit: "Bytes".to_owned(),
         value: 0.25
+      }, crate::Metric {
+        name: "usage".to_owned(),
+        unit: "Bytes".to_owned(),
+        value: 0.12
       }],
       timestamp: DateTime::parse_from_rfc3339("2019-01-07T23:15:48.677482816Z").unwrap(),
     }
