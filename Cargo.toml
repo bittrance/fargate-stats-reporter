@@ -11,15 +11,16 @@ failure = "*"
 getopts = "0.2.18"
 log = "0.4.1"
 reqwest = "0.9.5"
-rusoto_cloudwatch = "0.36.0"
-rusoto_core = "0.36.0"
+rusoto_cloudwatch = { git = "https://github.com/bittrance/rusoto", branch = "mock-dispatch-errors-take-2" }
+rusoto_core = { git = "https://github.com/bittrance/rusoto", branch = "mock-dispatch-errors-take-2" }
 serde_json = "1.0.33"
 stderrlog = "0.4.1"
 
 [dev-dependencies]
 mockito = "*"
-rusoto_mock = "*"
+rusoto_mock = { git = "https://github.com/bittrance/rusoto", branch = "mock-dispatch-errors-take-2" }
+serde_urlencoded = "*"
 
- [profile.release]
+[profile.release]
 lto = true
 panic = "abort"

@@ -18,6 +18,7 @@ use reqwest::Client as HttpClient;
 use rusoto_cloudwatch::{CloudWatch, CloudWatchClient, Dimension, MetricDatum, PutMetricDataError, PutMetricDataInput};
 use rusoto_core::Region;
 use serde_json::Value;
+use std::cmp::max;
 use std::collections::HashMap;
 use std::env::args;
 use std::iter::FromIterator;
@@ -33,6 +34,7 @@ pub struct Configuration {
   interval: Duration,
   log_level: usize,
   namespace: String,
+  queue_size: usize,
 }
 
 #[derive(Debug, PartialEq)]
@@ -111,7 +113,7 @@ pub fn container_stats(http: &HttpClient, base_url: &str) -> Result<Vec<Stats>, 
 
 type Metrics = Vec<MetricDatum>;
 
-pub fn metrics_from_stats(stats: Vec<Stats>, metadata: &HashMap<String, Metadata>) -> Metrics {
+pub fn metrics_from_stats(metrics: &mut Metrics, stats: Vec<Stats>, metadata: &HashMap<String, Metadata>) {
   stats.into_iter()
     .filter(|s| metadata.contains_key(&s.container_id))
     .flat_map(|s| {
@@ -128,21 +130,53 @@ pub fn metrics_from_stats(stats: Vec<Stats>, metadata: &HashMap<String, Metadata
         }
       )
     })
-    .collect()
+    .for_each(|m| metrics.push(m));
 }
 
-pub fn report_to_cloudwatch(client: &impl CloudWatch, namespace: &str, data: Metrics) -> Result<(), Error> {
-  for datum in data {
+pub fn report_to_cloudwatch(client: &impl CloudWatch, namespace: &str, data: &Metrics) -> Result<usize, Error> {
+  let mut start_index = 0;
+  while data.len() > start_index {
+    let chunk: Metrics = data.iter().skip(start_index).take(20).map(|l| l.clone()).collect();
+    let chunk_size = chunk.len();
     match client.put_metric_data(PutMetricDataInput {
       namespace: String::from(namespace),
-      metric_data: vec![datum]
+      metric_data: chunk,
     }).sync() {
-      Ok(_) => Ok(()),
-      Err(PutMetricDataError::Unknown(response)) =>
-        Err(format_err!("{}", String::from_utf8(response.body)?)),
-      Err(err) => Err(Error::from_boxed_compat(Box::new(err))),
+      Ok(_) => {
+        start_index += chunk_size;
+        Ok(())
+      },
+      Err(err) => match classify_cloudwatch_error(err) {
+        Action::Retry(cause) => {
+          warn!("Retrying error {}", cause);
+          break
+        },
+        Action::Fail(err) => Err(err),
+      }
     }?;
   }
+  Ok(start_index)
+}
+
+pub enum Action {
+  Retry(String),
+  Fail(Error),
+}
+
+pub fn classify_cloudwatch_error(error: PutMetricDataError) -> Action {
+  match error {
+    PutMetricDataError::HttpDispatch(err) => Action::Retry(format!("{:?}", err)),
+    PutMetricDataError::InternalServiceFault(message) => Action::Retry(message),
+    PutMetricDataError::Unknown(response) => Action::Retry(String::from_utf8(response.body).unwrap()),
+    err => Action::Fail(format_err!("{}", err)),
+  }
+}
+
+pub fn maintain_queue<F>(queue: &mut Metrics, max_size: usize, action: Box<F>) -> Result<(), Error>
+    where F: Fn(&Metrics) -> Result<usize, Error> {
+  let processed_items = action(&queue)?;
+  let queue_overflow = max(queue.len() as isize - max_size as isize, 0) as usize;
+  queue.drain(..max(processed_items, queue_overflow));
   Ok(())
 }
 
@@ -186,6 +220,14 @@ pub fn parse_args(args: &Vec<String>) -> Result<RunMode, Error> {
     Occur::Optional,
     Some("1".to_owned())
   );
+  argparser.option(
+    "q",
+    "queue-size",
+    "Number of metric datums to keep in queue during communication outages",
+    "QUEUE_SIZE",
+    Occur::Optional,
+    Some("100".to_owned())
+  );
   argparser.flag("h", "help", "Print this help and exit");
 
   argparser.parse(args)?;
@@ -198,6 +240,7 @@ pub fn parse_args(args: &Vec<String>) -> Result<RunMode, Error> {
       interval: Duration::from_secs(argparser.value_of("interval")?),
       log_level: argparser.value_of("log-level")?,
       namespace: argparser.value_of("metric-namespace")?,
+      queue_size: argparser.value_of("queue-size")?,
     }))
   }
 }
@@ -220,18 +263,20 @@ fn main() -> Result<(), Error> {
   };
   setup_logging(&configuration)?;
   warn!("Starting with configuration {:?}", configuration);
+  let mut metrics_queue = Metrics::new();
   let client = CloudWatchClient::new(Region::default());
   let http = HttpClient::builder()
     .timeout(Duration::from_secs(2))
     .build()?;
   loop {
-    let metadata = task_metadata(&http, &configuration.base_url)?;
-    let stats = container_stats(&http, &configuration.base_url)?;
-    let metric_count = stats.iter().map(|s| s.metrics.len() as i32).sum::<i32>();
-    let metrics = metrics_from_stats(stats, &metadata);
-    debug!("Sending metrics {:?}", metrics);
-    report_to_cloudwatch(&client, &configuration.namespace, metrics)?;
-    info!("Reported {} metrics on {} containers", metric_count, metadata.len());
+let metadata = task_metadata(&http, &configuration.base_url)?;
+let stats = container_stats(&http, &configuration.base_url)?;
+    metrics_from_stats(&mut metrics_queue, stats, &metadata);
+    maintain_queue(&mut metrics_queue, configuration.queue_size, Box::new(|metrics: &Metrics| {
+      let sent_metrics = report_to_cloudwatch(&client, &configuration.namespace, &metrics)?;
+      info!("Reported {}/{} metrics on {} containers", sent_metrics, metrics.len(), metadata.len());
+      Ok(sent_metrics)
+    }))?;
     sleep(configuration.interval);
   }
 }
