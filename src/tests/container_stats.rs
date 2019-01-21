@@ -1,9 +1,11 @@
 use chrono::DateTime;
 use mockito::mock;
+use reqwest::Client as HttpClient;
 use serde_json::json;
 
 #[test]
 fn no_containers() {
+  let http = HttpClient::new();
   let reply = json!({});
 
   let _stats_api = mock("GET", "/v2/stats")
@@ -13,13 +15,14 @@ fn no_containers() {
     .create();
 
   assert_eq!(
-    crate::container_stats(&mockito::server_url()).unwrap(),
+    crate::container_stats(&http, &mockito::server_url()).unwrap(),
     Vec::<crate::Stats>::new()
   );
 }
 
 #[test]
 fn extrace_container_stats() {
+  let http = HttpClient::new();
   let reply = json!({
     "ze-id": {
       "read": "2019-01-07T23:15:48.677482816Z",
@@ -51,12 +54,13 @@ fn extrace_container_stats() {
       timestamp: DateTime::parse_from_rfc3339("2019-01-07T23:15:48.677482816Z").unwrap(),
     }
   ];
-  let actual = crate::container_stats(&mockito::server_url()).unwrap();
+  let actual = crate::container_stats(&http, &mockito::server_url()).unwrap();
   assert_eq!(expected, actual);
 }
 
 #[test]
 fn new_container_is_null() {
+  let http = HttpClient::new();
   let reply = json!({"ze-id": null});
 
   let _stats_api = mock("GET", "/v2/stats")
@@ -66,7 +70,7 @@ fn new_container_is_null() {
     .create();
 
   assert_eq!(
-    crate::container_stats(&mockito::server_url()).unwrap(),
+    crate::container_stats(&http, &mockito::server_url()).unwrap(),
     Vec::<crate::Stats>::new()
   );
 }
