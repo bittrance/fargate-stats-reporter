@@ -1,3 +1,4 @@
+use crate::cloudwatch;
 use rusoto_cloudwatch::CloudWatchClient;
 use rusoto_core::HttpDispatchError;
 use rusoto_core::param::Params;
@@ -38,7 +39,7 @@ fn posts_metric_data_to_cloudwatch() {
     assert_eq!(params.get("MetricData.member.1.Value"), Some(&Some("25".to_owned())));
   });
   let mut data = vec![metric_datum()];
-  crate::report_to_cloudwatch(&cw, "testing", &mut data).unwrap();
+  cloudwatch::report_to_cloudwatch(&cw, "testing", &mut data).unwrap();
 }
 
 #[test]
@@ -51,7 +52,7 @@ fn sends_batches_of_20_metrics() {
     *count.lock().unwrap() += 1;
   });
   let data = repeat(metric_datum()).take(40).collect();
-  crate::report_to_cloudwatch(&cw, "testing", &data).unwrap();
+  cloudwatch::report_to_cloudwatch(&cw, "testing", &data).unwrap();
   assert_eq!(2, *copy.lock().unwrap());
 }
 
@@ -59,7 +60,7 @@ fn sends_batches_of_20_metrics() {
 fn says_count_items_were_sent() {
   let cw = client_with_http_status(200);
   let data = vec![metric_datum(), metric_datum()];
-  assert_eq!(2, crate::report_to_cloudwatch(&cw, "testing", &data).unwrap());
+  assert_eq!(2, cloudwatch::report_to_cloudwatch(&cw, "testing", &data).unwrap());
 }
 
 #[test]
@@ -70,7 +71,7 @@ fn says_zero_items_were_processed_on_dispatch_error() {
     Default::default()
   );
   let data = vec![metric_datum()];
-  assert_eq!(0, crate::report_to_cloudwatch(&cw, "testing", &data).unwrap());
+  assert_eq!(0, cloudwatch::report_to_cloudwatch(&cw, "testing", &data).unwrap());
 }
 
 #[test]
@@ -90,7 +91,7 @@ fn cloudwatch_server_side_error_is_readable() {
     Default::default()
   );
   let mut data = vec![metric_datum()];
-  match crate::report_to_cloudwatch(&cw, "testing", &mut data) {
+  match cloudwatch::report_to_cloudwatch(&cw, "testing", &mut data) {
     Ok(_) => panic!("Expected failed request to return err"),
     Err(msg) => assert!(format!("{}", msg).contains("some message")),
   };

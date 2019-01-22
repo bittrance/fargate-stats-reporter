@@ -1,3 +1,4 @@
+use crate::metadata_v2;
 use chrono::DateTime;
 use mockito::mock;
 use reqwest::Client as HttpClient;
@@ -15,8 +16,8 @@ fn no_containers() {
     .create();
 
   assert_eq!(
-    crate::container_stats(&http, &mockito::server_url()).unwrap(),
-    Vec::<crate::Stats>::new()
+    metadata_v2::container_stats(&http, &mockito::server_url()).unwrap(),
+    Vec::<metadata_v2::Stats>::new()
   );
 }
 
@@ -40,13 +41,13 @@ fn extrace_container_stats() {
     .create();
 
   let expected = vec![
-    crate::Stats {
+    metadata_v2::Stats {
       container_id: "ze-id".to_owned(),
-      metrics: vec![crate::Metric {
+      metrics: vec![metadata_v2::Metric {
         name: "max_usage".to_owned(),
         unit: "Bytes".to_owned(),
         value: 0.25
-      }, crate::Metric {
+      }, metadata_v2::Metric {
         name: "usage".to_owned(),
         unit: "Bytes".to_owned(),
         value: 0.12
@@ -54,7 +55,7 @@ fn extrace_container_stats() {
       timestamp: DateTime::parse_from_rfc3339("2019-01-07T23:15:48.677482816Z").unwrap(),
     }
   ];
-  let actual = crate::container_stats(&http, &mockito::server_url()).unwrap();
+  let actual = metadata_v2::container_stats(&http, &mockito::server_url()).unwrap();
   assert_eq!(expected, actual);
 }
 
@@ -70,7 +71,7 @@ fn new_container_is_null() {
     .create();
 
   assert_eq!(
-    crate::container_stats(&http, &mockito::server_url()).unwrap(),
-    Vec::<crate::Stats>::new()
+    metadata_v2::container_stats(&http, &mockito::server_url()).unwrap(),
+    Vec::<metadata_v2::Stats>::new()
   );
 }

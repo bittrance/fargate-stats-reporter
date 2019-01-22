@@ -1,3 +1,4 @@
+use crate::metadata_v2;
 use mockito::mock;
 use reqwest::Client as HttpClient;
 use rusoto_cloudwatch::Dimension;
@@ -16,8 +17,8 @@ fn no_containers() {
     .create();
 
   assert_eq!(
-    HashMap::<String, crate::Metadata>::new(),
-    crate::task_metadata(&http, &mockito::server_url()).unwrap()
+    HashMap::<String, metadata_v2::Metadata>::new(),
+    metadata_v2::task_metadata(&http, &mockito::server_url()).unwrap()
   );
 }
 
@@ -42,11 +43,11 @@ fn with_containers() {
     .with_body(reply.to_string())
     .create();
 
-  let actual = crate::task_metadata(&http, &mockito::server_url()).unwrap();
-  let mut expected = HashMap::<String, crate::Metadata>::new();
+  let actual = metadata_v2::task_metadata(&http, &mockito::server_url()).unwrap();
+  let mut expected = HashMap::<String, metadata_v2::Metadata>::new();
   expected.insert(
     "ze-id".to_owned(),
-    crate::Metadata {
+    metadata_v2::Metadata {
       container_id: "ze-id".to_owned(),
       dimensions: vec![
         Dimension {

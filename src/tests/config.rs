@@ -1,3 +1,4 @@
+use crate::config;
 use std::time::Duration;
 
 fn with_mandatory(mut extra: Vec<String>) -> Vec<String> {
@@ -8,7 +9,7 @@ fn with_mandatory(mut extra: Vec<String>) -> Vec<String> {
 
 #[test]
 fn namespace_is_mandatory() {
-  match crate::parse_args(&Vec::<String>::new()) {
+  match config::parse_args(&Vec::<String>::new()) {
     Ok(_) => panic!("Expected failure messag"),
     Err(_) => (),
   };
@@ -16,13 +17,13 @@ fn namespace_is_mandatory() {
 
 #[test]
 fn help_option() {
-  crate::parse_args(&vec!["-h".to_owned()]).unwrap();
+  config::parse_args(&vec!["-h".to_owned()]).unwrap();
 }
 
 #[test]
 fn minimum_configuration() {
   let args = with_mandatory(Vec::<String>::new());
-  if let crate::RunMode::Normal(res) = crate::parse_args(&args).unwrap() {
+  if let config::RunMode::Normal(res) = config::parse_args(&args).unwrap() {
     assert_eq!("http://169.254.170.2", res.base_url);
     assert_eq!(1, res.log_level);
     assert_eq!("some-namespace", res.namespace);
@@ -34,7 +35,7 @@ fn minimum_configuration() {
 #[test]
 fn set_interval() {
   let args = with_mandatory(vec!["-i".to_owned(), "30".to_owned()]);
-  if let crate::RunMode::Normal(res) = crate::parse_args(&args).unwrap() {
+  if let config::RunMode::Normal(res) = config::parse_args(&args).unwrap() {
     assert_eq!(Duration::from_secs(30), res.interval);
   } else {
     panic!("Expected a RunMode::Normal");
@@ -44,7 +45,7 @@ fn set_interval() {
 #[test]
 fn info_log_level() {
   let args = with_mandatory(vec!["-l".to_owned(), "2".to_owned()]);
-  if let crate::RunMode::Normal(res) = crate::parse_args(&args).unwrap() {
+  if let config::RunMode::Normal(res) = config::parse_args(&args).unwrap() {
     assert_eq!(2, res.log_level);
   } else {
     panic!("Expected a RunMode::Normal");
@@ -53,7 +54,7 @@ fn info_log_level() {
 
 #[test]
 fn print_help() {
-  if let crate::RunMode::Help(res) = crate::parse_args(&vec!["-h".to_owned()]).unwrap() {
+  if let config::RunMode::Help(res) = config::parse_args(&vec!["-h".to_owned()]).unwrap() {
     assert!(res.contains("Usage:"));
   } else {
     panic!("Expected a RunMode::Normal");

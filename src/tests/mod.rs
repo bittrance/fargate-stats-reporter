@@ -4,8 +4,8 @@ extern crate serde_urlencoded;
 mod container_stats;
 mod maintain_queue;
 mod metrics_from_stats;
-mod parse_args;
-mod report_to_cloudwatch;
+mod config;
+mod cloudwatch;
 mod task_metadata;
 
 use rusoto_cloudwatch::{Dimension, MetricDatum};
